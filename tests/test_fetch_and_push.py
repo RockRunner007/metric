@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from fetch_and_push import build_metrics_rows, get_repositories, upload_to_sharepoint, write_csv_output, write_pages_artifacts
+from fetch_and_push import build_metrics_rows, get_ghas_metrics, get_repositories, upload_to_sharepoint, write_csv_output, write_pages_artifacts
 
 
 class FetchAndPushTests(unittest.TestCase):
@@ -97,6 +97,18 @@ class FetchAndPushTests(unittest.TestCase):
             self.assertEqual(repos[0]["full_name"], "octo/one")
             self.assertEqual(repos[1]["full_name"], "octo/two")
             self.assertIn("/user/repos", mock_get.call_args_list[0][0][0])
+
+    def test_get_ghas_metrics_uses_github_token_when_pat_missing(self):
+        with patch("fetch_and_push.GH_TOKEN", ""), patch("fetch_and_push.ORG_NAME", ""), patch.dict("os.environ", {"GITHUB_TOKEN": "token-from-workflow", "GITHUB_REPOSITORY": "octo/demo"}, clear=False), patch("fetch_and_push.get_repositories", return_value=[{"full_name": "octo/demo", "archived": False}]) as mock_repos, patch("fetch_and_push.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = []
+            mock_get.return_value = mock_response
+
+            metrics = get_ghas_metrics()
+
+            self.assertEqual(metrics["rows"][0]["repository"], "octo/demo")
+            mock_repos.assert_called_once()
 
 
 if __name__ == "__main__":

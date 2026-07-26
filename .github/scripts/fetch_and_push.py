@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import requests
 
-GH_TOKEN = os.getenv("GH_PAT")
+GH_TOKEN = os.getenv("GH_PAT") or os.getenv("GITHUB_TOKEN") or ""
 ORG_NAME = os.getenv("GH_ORG_NAME") or os.getenv("GITHUB_REPOSITORY_OWNER") or ""
 TENANT_ID = os.getenv("SP_TENANT_ID", "")
 CLIENT_ID = os.getenv("SP_CLIENT_ID", "")
@@ -16,6 +16,21 @@ SP_SITE_URL = os.getenv("SP_SITE_URL", "")
 TARGET_FOLDER = os.getenv("SP_TARGET_FOLDER", "/Shared Documents/SecurityReports")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "ghas_metrics.json")
 OUTPUT_CSV = os.getenv("OUTPUT_CSV", "ghas_metrics.csv")
+
+
+def get_runtime_config() -> tuple[str, str]:
+    token = os.getenv("GH_PAT") or os.getenv("GITHUB_TOKEN") or GH_TOKEN or ""
+    owner = (
+        os.getenv("GH_ORG_NAME")
+        or os.getenv("GITHUB_REPOSITORY_OWNER")
+        or ORG_NAME
+        or ""
+    )
+    if not owner:
+        repository = os.getenv("GITHUB_REPOSITORY", "")
+        if "/" in repository:
+            owner = repository.split("/", 1)[0]
+    return token, owner
 
 
 def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
@@ -52,16 +67,17 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
 
 def get_ghas_metrics() -> dict[str, Any]:
     """Fetches GHAS metrics for all repositories visible to the authenticated account."""
-    if not GH_TOKEN or not ORG_NAME:
-        raise ValueError("GH_PAT and GH_ORG_NAME must be configured")
+    token, owner = get_runtime_config()
+    if not token or not owner:
+        raise ValueError("GH_PAT or GITHUB_TOKEN and a repository owner must be configured")
 
     headers = {
-        "Authorization": f"Bearer {GH_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    repos = get_repositories(GH_TOKEN, ORG_NAME)
+    repos = get_repositories(token, owner)
 
     rows: list[dict[str, Any]] = []
     for repo in repos:
@@ -86,9 +102,15 @@ def get_ghas_metrics() -> dict[str, Any]:
                 default_setup_response = requests.get(default_setup_url, headers=headers, timeout=30)
                 default_setup_response.raise_for_status()
                 default_setup = default_setup_response.json()
-                repo_metrics["default_setup_state"] = default_setup.get("state")
-                repo_metrics["scan_state"] = default_setup.get("state")
-                if default_setup.get("state") == "configured":
+                if isinstance(default_setup, dict):
+                    default_setup_state = default_setup.get("state")
+                elif isinstance(default_setup, list) and default_setup:
+                    default_setup_state = default_setup[0].get("state") if isinstance(default_setup[0], dict) else None
+                else:
+                    default_setup_state = None
+                repo_metrics["default_setup_state"] = default_setup_state
+                repo_metrics["scan_state"] = default_setup_state
+                if default_setup_state == "configured":
                     repo_metrics["scan_status"] = "configured"
                 else:
                     repo_metrics["scan_status"] = "pending"
@@ -143,7 +165,7 @@ def get_ghas_metrics() -> dict[str, Any]:
 
     summary = {
         "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "organization": ORG_NAME,
+        "organization": owner,
         "repositories_scanned": len(rows),
         "repositories_with_findings": sum(1 for item in rows if any([item["code_scanning_open"], item["dependabot_open"], item["secret_scanning_open"]])),
         "repositories_configured": sum(1 for item in rows if item.get("scan_status") == "configured"),
@@ -265,16 +287,17 @@ def upload_to_sharepoint(token: str, file_path: str, mock_mode: bool = False, ou
 
 
 if __name__ == "__main__":
+    runtime_token, runtime_owner = get_runtime_config()
     try:
         metrics = get_ghas_metrics()
     except Exception as exc:  # noqa: BLE001
         metrics = {
             "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "organization": ORG_NAME,
+            "organization": runtime_owner or ORG_NAME or "unknown",
             "error": str(exc),
             "rows": [
                 {
-                    "repository": ORG_NAME or "unknown",
+                    "repository": runtime_owner or ORG_NAME or "unknown",
                     "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "code_scanning_open": 0,
                     "code_scanning_critical": 0,

@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  security-events: read
 
 concurrency:
   group: pages
@@ -35,6 +36,7 @@ jobs:
       - name: Run GHAS metrics collection
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_ORG_NAME: ${{ github.repository_owner }}
           SP_TENANT_ID: ${{ secrets.SHAREPOINT_TENANT_ID }}
           SP_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
