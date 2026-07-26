@@ -116,16 +116,23 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
     ]
 
     repos: list[dict[str, Any]] = []
-    for repos_url in repos_urls:
-        repos_response = requests.get(repos_url, headers=headers, timeout=30)
-        if repos_response.status_code == 200:
-            repos = repos_response.json()
+    for url in repos_urls:
+        try:
+            while url:
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                repos.extend(response.json())
+
+                # Get next page URL from 'Link' header
+                url = ""
+                if 'link' in response.headers:
+                    links = requests.utils.parse_header_links(response.headers['link'])
+                    url = next((link['url'] for link in links if link.get('rel') == 'next'), "")
             if repos:
-                break
-        elif repos_response.status_code == 404:
-            continue
-        else:
-            repos_response.raise_for_status()
+                break  # Stop trying endpoints if we found repositories
+        except requests.HTTPError as exc:
+            if exc.response.status_code != 404:
+                raise
 
     if not repos:
         raise ValueError(f"Unable to list repositories for {owner}")
