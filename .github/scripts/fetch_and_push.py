@@ -166,12 +166,26 @@ def get_sharepoint_token() -> Optional[str]:
     return response.json().get("access_token")
 
 
-def upload_to_sharepoint(token: str, file_path: str) -> None:
-    """Uploads the compiled metrics file to the target SharePoint directory via Graph API."""
+def upload_to_sharepoint(token: str, file_path: str, mock_mode: bool = False, output_dir: Optional[Path] = None) -> None:
+    """Uploads the compiled metrics file to the target SharePoint directory via Graph API.
+
+    When mock_mode is enabled, the file is written to a local directory instead of trying
+    to contact SharePoint. This makes the workflow testable without a paid SharePoint site.
+    """
+    file_name = os.path.basename(file_path)
+
+    if mock_mode:
+        target_dir = output_dir or Path("mock-sharepoint")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        destination = target_dir / file_name
+        with open(file_path, "rb") as src, destination.open("wb") as dst:
+            dst.write(src.read())
+        print(f"Mock upload complete: wrote {file_name} to {destination}")
+        return
+
     if not SP_SITE_URL:
         raise ValueError("SP_SITE_URL is not configured")
 
-    file_name = os.path.basename(file_path)
     site_path = SP_SITE_URL.rstrip("/")
     url = f"{site_path}/drive/root:{TARGET_FOLDER}/{file_name}:/content"
 
@@ -220,6 +234,9 @@ if __name__ == "__main__":
             if token:
                 upload_to_sharepoint(token, str(csv_path))
             else:
-                print("SharePoint credentials not configured; leaving CSV artifact for download.")
+                if os.getenv("SP_MOCK_MODE", "true").lower() == "true":
+                    upload_to_sharepoint("mock-token", str(csv_path), mock_mode=True)
+                else:
+                    print("SharePoint credentials not configured; leaving CSV artifact for download.")
         except Exception as exc:  # noqa: BLE001
             print(f"SharePoint upload failed: {exc}. CSV artifact preserved.")
