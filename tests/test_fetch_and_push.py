@@ -3,10 +3,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from fetch_and_push import build_metrics_rows, upload_to_sharepoint, write_csv_output, write_pages_artifacts
+from fetch_and_push import build_metrics_rows, get_repositories, upload_to_sharepoint, write_csv_output, write_pages_artifacts
 
 
 class FetchAndPushTests(unittest.TestCase):
@@ -83,6 +84,19 @@ class FetchAndPushTests(unittest.TestCase):
 
             self.assertTrue((target_dir / "ghas_metrics.json").exists())
             self.assertTrue((target_dir / "ghas_metrics.csv").exists())
+
+    def test_get_repositories_prefers_authenticated_user_endpoint(self):
+        with patch("fetch_and_push.requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = [{"full_name": "octo/one"}, {"full_name": "octo/two"}]
+            mock_get.return_value = mock_response
+
+            repos = get_repositories("token", "octo")
+
+            self.assertEqual(repos[0]["full_name"], "octo/one")
+            self.assertEqual(repos[1]["full_name"], "octo/two")
+            self.assertIn("/user/repos", mock_get.call_args_list[0][0][0])
 
 
 if __name__ == "__main__":

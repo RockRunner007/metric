@@ -18,8 +18,40 @@ OUTPUT_JSON = os.getenv("OUTPUT_JSON", "ghas_metrics.json")
 OUTPUT_CSV = os.getenv("OUTPUT_CSV", "ghas_metrics.csv")
 
 
+def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
+    """Return all repositories visible to the authenticated user, including personal and org-owned repos."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    repos_urls = [
+        "https://api.github.com/user/repos?per_page=100",
+        f"https://api.github.com/orgs/{owner}/repos?per_page=100",
+        f"https://api.github.com/users/{owner}/repos?per_page=100",
+    ]
+
+    repos: list[dict[str, Any]] = []
+    for repos_url in repos_urls:
+        repos_response = requests.get(repos_url, headers=headers, timeout=30)
+        if repos_response.status_code == 200:
+            repos = repos_response.json()
+            if repos:
+                break
+        elif repos_response.status_code == 404:
+            continue
+        else:
+            repos_response.raise_for_status()
+
+    if not repos:
+        raise ValueError(f"Unable to list repositories for {owner}")
+
+    return repos
+
+
 def get_ghas_metrics() -> dict[str, Any]:
-    """Fetches GHAS metrics for the organization and repositories."""
+    """Fetches GHAS metrics for all repositories visible to the authenticated account."""
     if not GH_TOKEN or not ORG_NAME:
         raise ValueError("GH_PAT and GH_ORG_NAME must be configured")
 
@@ -29,21 +61,7 @@ def get_ghas_metrics() -> dict[str, Any]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    repos_urls = [
-        f"https://api.github.com/orgs/{ORG_NAME}/repos?per_page=100",
-        f"https://api.github.com/users/{ORG_NAME}/repos?per_page=100",
-    ]
-    repos = []
-    for repos_url in repos_urls:
-        repos_response = requests.get(repos_url, headers=headers, timeout=30)
-        if repos_response.status_code == 200:
-            repos = repos_response.json()
-            break
-        if repos_response.status_code == 404:
-            continue
-        repos_response.raise_for_status()
-    if not repos:
-        raise ValueError(f"Unable to list repositories for {ORG_NAME}")
+    repos = get_repositories(GH_TOKEN, ORG_NAME)
 
     rows: list[dict[str, Any]] = []
     for repo in repos:
