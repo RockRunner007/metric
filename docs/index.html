@@ -15,6 +15,10 @@
       code { background: rgba(255,255,255,0.09); padding: 0.12rem 0.3rem; border-radius: 4px; }
       a { color: #93c5fd; }
       .pill { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 999px; background: #1d4ed8; font-size: 0.8rem; margin-top: 0.25rem; }
+      .status { font-size: 0.85rem; color: #cbd5e1; }
+      .status-configured { color: #4ade80; }
+      .status-pending { color: #fbbf24; }
+      .status-findings { color: #f87171; }
     </style>
   </head>
   <body>
@@ -61,6 +65,9 @@
 
           summary.innerHTML = [
             ['Repositories', totals.repositories],
+            ['Configured', data.repositories_configured || 0],
+            ['Pending', data.repositories_pending || 0],
+            ['With alerts', data.repositories_with_alerts || 0],
             ['With findings', totals.withFindings],
             ['Total findings', totals.findings],
             ['Code scanning', totals.codeScanning],
@@ -77,7 +84,7 @@
 
           repos.innerHTML = topRows.map((row) => `
             <tr>
-              <td><code>${row.repository}</code></td>
+              <td><code>${row.repository}</code><div class="status ${row.scan_status === 'findings' ? 'status-findings' : row.scan_status === 'configured' ? 'status-configured' : row.scan_status === 'pending' ? 'status-pending' : ''}">${row.scan_status || 'unknown'}</div></td>
               <td>${row.code_scanning_open || 0}</td>
               <td>${row.code_scanning_critical || 0}</td>
               <td>${row.code_scanning_high || 0}</td>

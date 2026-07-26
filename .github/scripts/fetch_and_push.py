@@ -76,7 +76,25 @@ def get_ghas_metrics() -> dict[str, Any]:
                 "dependabot_open": 0,
                 "secret_scanning_open": 0,
                 "status": "ok",
+                "scan_status": "unknown",
+                "scan_state": None,
+                "default_setup_state": None,
             }
+
+            try:
+                default_setup_url = f"https://api.github.com/repos/{repo_name}/code-scanning/default-setup"
+                default_setup_response = requests.get(default_setup_url, headers=headers, timeout=30)
+                default_setup_response.raise_for_status()
+                default_setup = default_setup_response.json()
+                repo_metrics["default_setup_state"] = default_setup.get("state")
+                repo_metrics["scan_state"] = default_setup.get("state")
+                if default_setup.get("state") == "configured":
+                    repo_metrics["scan_status"] = "configured"
+                else:
+                    repo_metrics["scan_status"] = "pending"
+            except requests.HTTPError as exc:
+                repo_metrics["scan_status"] = "error"
+                repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
 
             try:
                 code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
@@ -90,6 +108,8 @@ def get_ghas_metrics() -> dict[str, Any]:
                 repo_metrics["code_scanning_high"] = sum(
                     1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "high"
                 )
+                if repo_metrics["code_scanning_open"]:
+                    repo_metrics["scan_status"] = "findings"
             except requests.HTTPError as exc:
                 repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
 
@@ -126,6 +146,9 @@ def get_ghas_metrics() -> dict[str, Any]:
         "organization": ORG_NAME,
         "repositories_scanned": len(rows),
         "repositories_with_findings": sum(1 for item in rows if any([item["code_scanning_open"], item["dependabot_open"], item["secret_scanning_open"]])),
+        "repositories_configured": sum(1 for item in rows if item.get("scan_status") == "configured"),
+        "repositories_pending": sum(1 for item in rows if item.get("scan_status") == "pending"),
+        "repositories_with_alerts": sum(1 for item in rows if item.get("scan_status") == "findings"),
         "total_code_scanning_open": sum(item["code_scanning_open"] for item in rows),
         "total_code_scanning_critical": sum(item["code_scanning_critical"] for item in rows),
         "total_code_scanning_high": sum(item["code_scanning_high"] for item in rows),
