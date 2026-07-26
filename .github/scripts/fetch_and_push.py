@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -102,6 +103,21 @@ def filter_repositories_by_allowlist(repositories: list[dict[str, Any]], allowli
     return [repo for repo in repositories if str(repo.get("full_name", "")).lower() in allowlist_set]
 
 
+def _retryable_request(func):
+    """Decorator to add retry logic to requests."""
+    def wrapper(*args, **kwargs):
+        for i in range(3):
+            try:
+                return func(*args, **kwargs)
+            except requests.exceptions.RequestException as e:
+                if i < 2:
+                    print(f"Request failed: {e}. Retrying in 5s...")
+                    time.sleep(5)
+                else:
+                    raise
+    return wrapper
+
+@_retryable_request
 def _fetch_paginated_data(url: str, headers: dict[str, str]) -> list[dict[str, Any]]:
     """Fetch all pages of data from a paginated GitHub API endpoint."""
     results = []
