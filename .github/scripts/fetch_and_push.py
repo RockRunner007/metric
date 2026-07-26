@@ -157,7 +157,12 @@ def get_ghas_metrics() -> dict[str, Any]:
                 if repo_metrics["code_scanning_open"]:
                     repo_metrics["scan_status"] = "findings"
             except requests.HTTPError as exc:
-                repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+                if exc.response.status_code not in {403, 404}:
+                    repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+                else:
+                    repo_metrics["code_scanning_open"] = 0
+                    repo_metrics["code_scanning_critical"] = 0
+                    repo_metrics["code_scanning_high"] = 0
 
             try:
                 dependabot_url = f"https://api.github.com/repos/{repo_name}/dependabot/alerts?state=open&per_page=100"
