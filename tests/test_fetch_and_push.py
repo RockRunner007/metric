@@ -29,6 +29,7 @@ class FetchAndPushTests(unittest.TestCase):
             "code_scanning_open": 4,
             "code_scanning_critical": 1,
             "code_scanning_high": 2,
+            "code_scanning_medium": 1,
             "dependabot_open": 3,
             "secret_scanning_open": 1,
             "status": "ok",
@@ -38,6 +39,7 @@ class FetchAndPushTests(unittest.TestCase):
 
         self.assertEqual(rows[0]["repository"], "octo/sample")
         self.assertEqual(rows[0]["code_scanning_open"], 4)
+        self.assertEqual(rows[0]["code_scanning_medium"], 1)
         self.assertEqual(rows[0]["dependabot_open"], 3)
         self.assertEqual(rows[0]["secret_scanning_open"], 1)
 
@@ -50,6 +52,7 @@ class FetchAndPushTests(unittest.TestCase):
                 "code_scanning_open": 1,
                 "code_scanning_critical": 0,
                 "code_scanning_high": 1,
+                "code_scanning_medium": 0,
                 "dependabot_open": 0,
                 "secret_scanning_open": 0,
                 "status": "ok",
@@ -85,6 +88,7 @@ class FetchAndPushTests(unittest.TestCase):
                     "code_scanning_open": 1,
                     "code_scanning_critical": 0,
                     "code_scanning_high": 1,
+                    "code_scanning_medium": 0,
                     "dependabot_open": 0,
                     "secret_scanning_open": 0,
                     "status": "ok",
@@ -152,6 +156,7 @@ class FetchAndPushTests(unittest.TestCase):
                     "code_scanning_open": 2,
                     "code_scanning_critical": 1,
                     "code_scanning_high": 1,
+                    "code_scanning_medium": 0,
                     "dependabot_open": 1,
                     "secret_scanning_open": 0,
                     "status": "ok",

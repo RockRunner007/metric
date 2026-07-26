@@ -41,7 +41,7 @@
       <h2>Highest-risk repositories</h2>
       <table>
         <thead>
-          <tr><th>Repository</th><th>Code scanning</th><th>Critical</th><th>High</th><th>Dependabot</th><th>Secret scanning</th></tr>
+          <tr><th>Repository</th><th>Code scanning</th><th>Critical</th><th>High</th><th>Medium</th><th>Dependabot</th><th>Secret scanning</th></tr>
         </thead>
         <tbody id="repos"></tbody>
       </table>
@@ -65,6 +65,7 @@
             codeScanning: data.total_code_scanning_open || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0), 0),
             critical: data.total_code_scanning_critical || rows.reduce((sum, row) => sum + (Number(row.code_scanning_critical) || 0), 0),
             high: data.total_code_scanning_high || rows.reduce((sum, row) => sum + (Number(row.code_scanning_high) || 0), 0),
+            medium: data.total_code_scanning_medium || rows.reduce((sum, row) => sum + (Number(row.code_scanning_medium) || 0), 0),
             dependabot: data.total_dependabot_open || rows.reduce((sum, row) => sum + (Number(row.dependabot_open) || 0), 0),
             secrets: data.total_secret_scanning_open || rows.reduce((sum, row) => sum + (Number(row.secret_scanning_open) || 0), 0),
           };
@@ -79,6 +80,7 @@
             ['Code scanning', totals.codeScanning],
             ['Critical', totals.critical],
             ['High', totals.high],
+            ['Medium', totals.medium],
             ['Dependabot', totals.dependabot],
             ['Secret scanning', totals.secrets],
           ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div><div class="pill">Live</div></div>`).join('');
@@ -100,6 +102,7 @@
               <td>${row.code_scanning_open || 0}</td>
               <td>${row.code_scanning_critical || 0}</td>
               <td>${row.code_scanning_high || 0}</td>
+              <td>${row.code_scanning_medium || 0}</td>
               <td>${row.dependabot_open || 0}</td>
               <td>${row.secret_scanning_open || 0}</td>
             </tr>
@@ -107,7 +110,7 @@
         })
         .catch(() => {
           document.getElementById('summary').innerHTML = '<div class="metric">Metrics are not available yet.</div>';
-          document.getElementById('repos').innerHTML = '<tr><td colspan="6">Run the workflow once to generate the demo data.</td></tr>';
+          document.getElementById('repos').innerHTML = '<tr><td colspan="7">Run the workflow once to generate the demo data.</td></tr>';
         });
     </script>
   </body>

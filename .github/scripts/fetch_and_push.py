@@ -27,6 +27,7 @@ DEFAULT_CSV_COLUMNS = [
     "code_scanning_open",
     "code_scanning_critical",
     "code_scanning_high",
+    "code_scanning_medium",
     "dependabot_open",
     "secret_scanning_open",
     "status",
@@ -195,6 +196,7 @@ def get_ghas_metrics() -> dict[str, Any]:
                 "code_scanning_open": 0,
                 "code_scanning_critical": 0,
                 "code_scanning_high": 0,
+                "code_scanning_medium": 0,
                 "dependabot_open": 0,
                 "secret_scanning_open": 0,
                 "status": "ok",
@@ -239,6 +241,9 @@ def get_ghas_metrics() -> dict[str, Any]:
                 repo_metrics["code_scanning_high"] = sum(
                     1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "high"
                 )
+                repo_metrics["code_scanning_medium"] = sum(
+                    1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "medium"
+                )
                 if repo_metrics["code_scanning_open"]:
                     repo_metrics["scan_status"] = "findings"
             except requests.HTTPError as exc:
@@ -248,6 +253,7 @@ def get_ghas_metrics() -> dict[str, Any]:
                     repo_metrics["code_scanning_open"] = 0
                     repo_metrics["code_scanning_critical"] = 0
                     repo_metrics["code_scanning_high"] = 0
+                    repo_metrics["code_scanning_medium"] = 0
 
             try:
                 dependabot_url = f"https://api.github.com/repos/{repo_name}/dependabot/alerts?state=open&per_page=100"
@@ -290,6 +296,7 @@ def get_ghas_metrics() -> dict[str, Any]:
         "total_code_scanning_open": sum(item["code_scanning_open"] for item in rows),
         "total_code_scanning_critical": sum(item["code_scanning_critical"] for item in rows),
         "total_code_scanning_high": sum(item["code_scanning_high"] for item in rows),
+        "total_code_scanning_medium": sum(item.get("code_scanning_medium", 0) for item in rows),
         "total_dependabot_open": sum(item["dependabot_open"] for item in rows),
         "total_secret_scanning_open": sum(item["secret_scanning_open"] for item in rows),
         "total_findings": sum(
@@ -383,6 +390,7 @@ def write_ticket_csv_output(metrics: dict[str, Any], output_path: Optional[Path]
                     "code_scanning_open": row.get("code_scanning_open", 0),
                     "code_scanning_critical": row.get("code_scanning_critical", 0),
                     "code_scanning_high": row.get("code_scanning_high", 0),
+                    "code_scanning_medium": row.get("code_scanning_medium", 0),
                     "dependabot_open": row.get("dependabot_open", 0),
                     "secret_scanning_open": row.get("secret_scanning_open", 0),
                     "status": row.get("status", "ok"),
@@ -399,6 +407,7 @@ def write_ticket_csv_output(metrics: dict[str, Any], output_path: Optional[Path]
                 "code_scanning_open",
                 "code_scanning_critical",
                 "code_scanning_high",
+                "code_scanning_medium",
                 "dependabot_open",
                 "secret_scanning_open",
                 "status",
@@ -497,6 +506,7 @@ if __name__ == "__main__":
                     "code_scanning_open": 0,
                     "code_scanning_critical": 0,
                     "code_scanning_high": 0,
+                    "code_scanning_medium": 0,
                     "dependabot_open": 0,
                     "secret_scanning_open": 0,
                     "status": f"error:{exc}",
