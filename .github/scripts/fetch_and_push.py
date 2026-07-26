@@ -4,7 +4,7 @@ import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import requests
 
@@ -17,6 +17,22 @@ SP_SITE_URL = os.getenv("SP_SITE_URL", "")
 TARGET_FOLDER = os.getenv("SP_TARGET_FOLDER", "/Shared Documents/SecurityReports")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "ghas_metrics.json")
 OUTPUT_CSV = os.getenv("OUTPUT_CSV", "ghas_metrics.csv")
+REPO_ALLOWLIST_FILE = os.getenv("REPO_ALLOWLIST_FILE", ".github/config/repo_allowlist.json")
+COLUMN_MANIFEST_FILE = os.getenv("COLUMN_MANIFEST_FILE", ".github/config/column_manifest.json")
+TICKET_CSV = os.getenv("TICKET_CSV", "tickets.csv")
+DEFAULT_CSV_COLUMNS = [
+    "repository",
+    "fetched_at",
+    "code_scanning_open",
+    "code_scanning_critical",
+    "code_scanning_high",
+    "dependabot_open",
+    "secret_scanning_open",
+    "status",
+    "scan_status",
+    "scan_state",
+    "default_setup_state",
+]
 
 
 def get_runtime_config() -> tuple[str, str]:
@@ -56,6 +72,34 @@ def get_runtime_config() -> tuple[str, str]:
             except Exception:
                 owner = ""
     return token, owner
+
+
+def load_repo_allowlist(path: Optional[Union[Path, str]] = None) -> list[str]:
+    """Load a repository allowlist from a JSON file if one is present."""
+    allowlist_path = Path(path or REPO_ALLOWLIST_FILE)
+    if not allowlist_path.exists():
+        return []
+
+    with allowlist_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    if isinstance(payload, list):
+        return [str(item) for item in payload if str(item)]
+    if isinstance(payload, dict):
+        for key in ("repositories", "repos", "scan_repositories"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [str(item) for item in value if str(item)]
+    return []
+
+
+def filter_repositories_by_allowlist(repositories: list[dict[str, Any]], allowlist: list[str]) -> list[dict[str, Any]]:
+    """Restrict the repo set to the configured allowlist when one is provided."""
+    if not allowlist:
+        return repositories
+
+    allowlist_set = {item.lower() for item in allowlist if item}
+    return [repo for repo in repositories if str(repo.get("full_name", "")).lower() in allowlist_set]
 
 
 def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
@@ -102,6 +146,8 @@ def get_ghas_metrics() -> dict[str, Any]:
     }
 
     repos = get_repositories(token, owner)
+    allowlist = load_repo_allowlist()
+    repos = filter_repositories_by_allowlist(repos, allowlist)
 
     rows: list[dict[str, Any]] = []
     for repo in repos:
@@ -236,28 +282,100 @@ def build_metrics_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def load_column_manifest(path: Optional[Union[Path, str]] = None) -> dict[str, Any]:
+    """Load the column manifest from disk when present, otherwise return the default schema."""
+    manifest_path = Path(path or COLUMN_MANIFEST_FILE)
+    if not manifest_path.exists():
+        return {"columns": DEFAULT_CSV_COLUMNS}
+
+    with manifest_path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    if isinstance(data, dict):
+        columns = data.get("columns")
+        if isinstance(columns, list) and columns:
+            return {"columns": [str(column) for column in columns]}
+    return {"columns": DEFAULT_CSV_COLUMNS}
+
+
+def write_column_manifest(metrics: dict[str, Any], output_path: Optional[Path] = None) -> Path:
+    """Write a JSON manifest describing the CSV schema for this metrics export."""
+    rows = build_metrics_rows(metrics)
+    known_columns = set(DEFAULT_CSV_COLUMNS)
+    for row in rows:
+        known_columns.update(row.keys())
+
+    columns = list(DEFAULT_CSV_COLUMNS)
+    for column in sorted(known_columns):
+        if column not in columns:
+            columns.append(column)
+
+    manifest = {"columns": columns, "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    target_path = output_path or Path("columns.json")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with target_path.open("w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2)
+    return target_path
+
+
 def write_csv_output(metrics: dict[str, Any], output_path: Optional[Path] = None) -> Path:
     rows = build_metrics_rows(metrics)
     target_path = output_path or Path(OUTPUT_CSV)
+    manifest = load_column_manifest()
+    fieldnames = [column for column in manifest.get("columns", DEFAULT_CSV_COLUMNS) if column in DEFAULT_CSV_COLUMNS or any(column in row for row in rows)]
+    if not fieldnames:
+        fieldnames = DEFAULT_CSV_COLUMNS
+    with target_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return target_path
+
+
+def write_ticket_csv_output(metrics: dict[str, Any], output_path: Optional[Path] = None) -> Path:
+    """Write a separate CSV intended for future ticket creation workflows."""
+    rows = build_metrics_rows(metrics)
+    target_path = output_path or Path(TICKET_CSV)
+
+    ticket_rows: list[dict[str, Any]] = []
+    for row in rows:
+        total_findings = (
+            int(row.get("code_scanning_open", 0))
+            + int(row.get("dependabot_open", 0))
+            + int(row.get("secret_scanning_open", 0))
+        )
+        if total_findings > 0 or row.get("scan_status") in {"error", "pending"}:
+            ticket_rows.append(
+                {
+                    "repository": row.get("repository", ""),
+                    "scan_status": row.get("scan_status", "unknown"),
+                    "total_findings": total_findings,
+                    "code_scanning_open": row.get("code_scanning_open", 0),
+                    "code_scanning_critical": row.get("code_scanning_critical", 0),
+                    "code_scanning_high": row.get("code_scanning_high", 0),
+                    "dependabot_open": row.get("dependabot_open", 0),
+                    "secret_scanning_open": row.get("secret_scanning_open", 0),
+                    "status": row.get("status", "ok"),
+                }
+            )
+
     with target_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
                 "repository",
-                "fetched_at",
+                "scan_status",
+                "total_findings",
                 "code_scanning_open",
                 "code_scanning_critical",
                 "code_scanning_high",
                 "dependabot_open",
                 "secret_scanning_open",
                 "status",
-                "scan_status",
-                "scan_state",
-                "default_setup_state",
             ],
         )
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(ticket_rows)
     return target_path
 
 
@@ -274,6 +392,10 @@ def write_pages_artifacts(metrics: dict[str, Any], output_dir: Optional[Path] = 
 
     write_json_output(metrics, target_dir / "ghas_metrics.json")
     write_csv_output(metrics, target_dir / "ghas_metrics.csv")
+    write_column_manifest(metrics, target_dir / "columns.json")
+    write_ticket_csv_output(metrics, target_dir / "tickets.csv")
+    write_column_manifest(metrics, Path(COLUMN_MANIFEST_FILE))
+    write_ticket_csv_output(metrics, Path(TICKET_CSV))
     return target_dir
 
 
@@ -357,6 +479,7 @@ if __name__ == "__main__":
     csv_path = write_csv_output(metrics)
     pages_dir = write_pages_artifacts(metrics)
     print(f"Wrote JSON metrics to {OUTPUT_JSON}, CSV metrics to {csv_path}, and Pages data to {pages_dir}")
+    print(f"Wrote column manifest to columns.json and ticket export to {TICKET_CSV}")
 
     if not os.getenv("SP_SKIP_UPLOAD"):
         try:

@@ -1,0 +1,16 @@
+{
+  "columns": [
+    "repository",
+    "fetched_at",
+    "code_scanning_open",
+    "code_scanning_critical",
+    "code_scanning_high",
+    "dependabot_open",
+    "secret_scanning_open",
+    "status",
+    "scan_status",
+    "scan_state",
+    "default_setup_state"
+  ],
+  "generated_at": "2026-07-26T21:31:46Z"
+}

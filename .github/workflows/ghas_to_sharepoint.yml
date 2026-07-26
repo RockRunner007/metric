@@ -57,8 +57,12 @@ jobs:
           path: |
             ghas_metrics.json
             ghas_metrics.csv
+            columns.json
+            tickets.csv
             docs/data/ghas_metrics.json
             docs/data/ghas_metrics.csv
+            docs/data/columns.json
+            docs/data/tickets.csv
             docs/index.html
           if-no-files-found: warn
 
