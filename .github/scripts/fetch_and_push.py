@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -20,6 +21,18 @@ OUTPUT_CSV = os.getenv("OUTPUT_CSV", "ghas_metrics.csv")
 
 def get_runtime_config() -> tuple[str, str]:
     token = os.getenv("GH_PAT") or os.getenv("GITHUB_TOKEN") or GH_TOKEN or ""
+    if not token:
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "token"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            token = result.stdout.strip()
+        except Exception:
+            token = ""
+
     owner = (
         os.getenv("GH_ORG_NAME")
         or os.getenv("GITHUB_REPOSITORY_OWNER")
@@ -30,6 +43,18 @@ def get_runtime_config() -> tuple[str, str]:
         repository = os.getenv("GITHUB_REPOSITORY", "")
         if "/" in repository:
             owner = repository.split("/", 1)[0]
+        else:
+            try:
+                result = subprocess.run(
+                    ["gh", "api", "user"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                user_payload = json.loads(result.stdout or "{}")
+                owner = user_payload.get("login") or ""
+            except Exception:
+                owner = ""
     return token, owner
 
 
@@ -211,6 +236,9 @@ def write_csv_output(metrics: dict[str, Any], output_path: Optional[Path] = None
                 "dependabot_open",
                 "secret_scanning_open",
                 "status",
+                "scan_status",
+                "scan_state",
+                "default_setup_state",
             ],
         )
         writer.writeheader()
