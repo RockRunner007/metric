@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>GHAS Metrics Demo</title>
     <style>
       :root { color-scheme: dark; }
@@ -45,7 +48,10 @@
     </div>
 
     <script>
-      fetch('./data/ghas_metrics.json')
+      const dataUrl = new URL('./data/ghas_metrics.json', window.location.href);
+      dataUrl.searchParams.set('v', Date.now());
+
+      fetch(dataUrl.toString(), { cache: 'no-store' })
         .then((response) => response.json())
         .then((data) => {
           const rows = Array.isArray(data.rows) ? data.rows : [];
@@ -76,6 +82,12 @@
             ['Dependabot', totals.dependabot],
             ['Secret scanning', totals.secrets],
           ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div><div class="pill">Live</div></div>`).join('');
+
+          const updated = document.createElement('p');
+          updated.textContent = `Updated: ${data.fetched_at || 'n/a'}`;
+          updated.style.marginTop = '0.75rem';
+          updated.style.color = '#cbd5e1';
+          summary.parentNode.insertBefore(updated, summary.nextSibling);
 
           const topRows = (data.top_repositories || rows)
             .filter((row) => row && row.repository)
