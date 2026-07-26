@@ -5,26 +5,83 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GHAS Metrics Demo</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.5; }
-      pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; }
+      body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.5; color: #1f2937; }
+      .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+      .metric { background: #f9fafb; padding: 0.75rem; border-radius: 8px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #e5e7eb; padding: 0.6rem; text-align: left; }
+      code { background: #f3f4f6; padding: 0.15rem 0.25rem; border-radius: 4px; }
     </style>
   </head>
   <body>
     <h1>GitHub Advanced Security Metrics Demo</h1>
-    <p>This page is generated from the workflow output and can be served via GitHub Pages.</p>
+    <p>Repository-wide findings from the latest workflow run.</p>
     <p>
       <a href="./data/ghas_metrics.csv">Download CSV</a> |
       <a href="./data/ghas_metrics.json">View JSON</a>
     </p>
-    <pre id="status">Loading metrics…</pre>
+
+    <div class="card">
+      <h2>Summary</h2>
+      <div class="grid" id="summary"></div>
+    </div>
+
+    <div class="card">
+      <h2>Top repositories</h2>
+      <table>
+        <thead>
+          <tr><th>Repository</th><th>Code scanning</th><th>Critical</th><th>High</th><th>Dependabot</th><th>Secret scanning</th></tr>
+        </thead>
+        <tbody id="repos"></tbody>
+      </table>
+    </div>
+
     <script>
       fetch('./data/ghas_metrics.json')
         .then((response) => response.json())
         .then((data) => {
-          document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+          const rows = Array.isArray(data.rows) ? data.rows : [];
+          const summary = document.getElementById('summary');
+          const repos = document.getElementById('repos');
+
+          const totals = {
+            repositories: data.repositories_scanned || rows.length,
+            codeScanning: data.total_code_scanning_open || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0), 0),
+            critical: data.total_code_scanning_critical || rows.reduce((sum, row) => sum + (Number(row.code_scanning_critical) || 0), 0),
+            high: data.total_code_scanning_high || rows.reduce((sum, row) => sum + (Number(row.code_scanning_high) || 0), 0),
+            dependabot: data.total_dependabot_open || rows.reduce((sum, row) => sum + (Number(row.dependabot_open) || 0), 0),
+            secrets: data.total_secret_scanning_open || rows.reduce((sum, row) => sum + (Number(row.secret_scanning_open) || 0), 0),
+          };
+
+          summary.innerHTML = [
+            ['Repositories', totals.repositories],
+            ['Code scanning', totals.codeScanning],
+            ['Critical', totals.critical],
+            ['High', totals.high],
+            ['Dependabot', totals.dependabot],
+            ['Secret scanning', totals.secrets],
+          ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div></div>`).join('');
+
+          const topRows = rows
+            .filter((row) => row && row.repository)
+            .sort((a, b) => (Number(b.code_scanning_open) || 0) - (Number(a.code_scanning_open) || 0))
+            .slice(0, 10);
+
+          repos.innerHTML = topRows.map((row) => `
+            <tr>
+              <td><code>${row.repository}</code></td>
+              <td>${row.code_scanning_open || 0}</td>
+              <td>${row.code_scanning_critical || 0}</td>
+              <td>${row.code_scanning_high || 0}</td>
+              <td>${row.dependabot_open || 0}</td>
+              <td>${row.secret_scanning_open || 0}</td>
+            </tr>
+          `).join('');
         })
         .catch(() => {
-          document.getElementById('status').textContent = 'Metrics file is not available yet. Run the workflow once to generate it.';
+          document.getElementById('summary').innerHTML = '<div class="metric">Metrics are not available yet.</div>';
+          document.getElementById('repos').innerHTML = '<tr><td colspan="6">Run the workflow once to generate the demo data.</td></tr>';
         });
     </script>
   </body>
