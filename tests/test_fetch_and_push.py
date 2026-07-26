@@ -129,6 +129,7 @@ class FetchAndPushTests(unittest.TestCase):
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = []
+            mock_response.headers = {}
             mock_get.return_value = mock_response
 
             metrics = get_ghas_metrics()
