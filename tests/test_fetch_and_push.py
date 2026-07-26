@@ -98,19 +98,26 @@ class FetchAndPushTests(unittest.TestCase):
 
     def test_get_repositories_prefers_authenticated_user_endpoint(self):
         with patch("fetch_and_push.requests.get") as mock_get:
-            mock_response = Mock()
-            mock_response.headers = {} # No 'link' header, so no pagination
-            mock_response.status_code = 200
-            mock_response.json.return_value = [{"full_name": "octo/one"}, {"full_name": "octo/two"}]
-            mock_get.return_value = mock_response
+            # Simulate user endpoint returning data and org endpoint failing
+            mock_user_response = Mock()
+            mock_user_response.status_code = 200
+            mock_user_response.json.return_value = [{"full_name": "octo/one"}]
+            mock_user_response.headers = {}
+
+            mock_org_response = Mock()
+            mock_org_response.status_code = 404
+
+            mock_get.side_effect = [mock_user_response, mock_org_response]
 
             repos = get_repositories("token", "octo")
 
-            # It should try the user endpoint first
-            mock_get.assert_called_once_with("https://api.github.com/users/octo/repos?per_page=100", headers=unittest.mock.ANY, timeout=30)
+            # It should try both endpoints
+            self.assertEqual(mock_get.call_count, 2)
+            self.assertEqual(mock_get.call_args_list[0].args[0], "https://api.github.com/users/octo/repos?per_page=100")
+            self.assertEqual(mock_get.call_args_list[1].args[0], "https://api.github.com/orgs/octo/repos?per_page=100")
 
+            self.assertEqual(len(repos), 1)
             self.assertEqual(repos[0]["full_name"], "octo/one")
-            self.assertEqual(repos[1]["full_name"], "octo/two")
 
     def test_get_ghas_metrics_uses_github_token_when_pat_missing(self):
         with patch("fetch_and_push.GH_TOKEN", ""), patch("fetch_and_push.ORG_NAME", ""), patch.dict("os.environ", {"GITHUB_TOKEN": "token-from-workflow", "GITHUB_REPOSITORY": "octo/demo"}, clear=False), patch("fetch_and_push.get_repositories", return_value=[{"full_name": "octo/demo", "archived": False}]) as mock_repos, patch("fetch_and_push.requests.get") as mock_get:

@@ -102,6 +102,22 @@ def filter_repositories_by_allowlist(repositories: list[dict[str, Any]], allowli
     return [repo for repo in repositories if str(repo.get("full_name", "")).lower() in allowlist_set]
 
 
+def _fetch_paginated_data(url: str, headers: dict[str, str]) -> list[dict[str, Any]]:
+    """Fetch all pages of data from a paginated GitHub API endpoint."""
+    results = []
+    next_url: Optional[str] = url
+    while next_url:
+        response = requests.get(next_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        results.extend(response.json())
+
+        # Get next page URL from 'Link' header
+        next_url = None
+        if 'link' in response.headers:
+            links = requests.utils.parse_header_links(response.headers['link'])
+            next_url = next((link['url'] for link in links if link.get('rel') == 'next'), None)
+    return results
+
 def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
     """Return repositories visible to the authenticated user without relying on the /user/repos endpoint."""
     headers = {
@@ -117,19 +133,11 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
 
     repos: list[dict[str, Any]] = []
     for url in repos_urls:
+        # We try both user and org endpoints, but only one will succeed.
+        # We don't break after the first success because a user can be part of an org.
+        # We collect from all valid endpoints.
         try:
-            while url:
-                response = requests.get(url, headers=headers, timeout=30)
-                response.raise_for_status()
-                repos.extend(response.json())
-
-                # Get next page URL from 'Link' header
-                url = ""
-                if 'link' in response.headers:
-                    links = requests.utils.parse_header_links(response.headers['link'])
-                    url = next((link['url'] for link in links if link.get('rel') == 'next'), "")
-            if repos:
-                break  # Stop trying endpoints if we found repositories
+            repos.extend(_fetch_paginated_data(url, headers))
         except requests.HTTPError as exc:
             if exc.response.status_code != 404:
                 raise
@@ -202,9 +210,7 @@ def get_ghas_metrics() -> dict[str, Any]:
 
             try:
                 code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
-                cs_response = requests.get(code_scanning_url, headers=headers, timeout=30)
-                cs_response.raise_for_status()
-                alerts = cs_response.json()
+                alerts = _fetch_paginated_data(code_scanning_url, headers)
                 repo_metrics["code_scanning_open"] = len(alerts)
                 repo_metrics["code_scanning_critical"] = sum(
                     1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "critical"
@@ -224,9 +230,7 @@ def get_ghas_metrics() -> dict[str, Any]:
 
             try:
                 dependabot_url = f"https://api.github.com/repos/{repo_name}/dependabot/alerts?state=open&per_page=100"
-                dep_response = requests.get(dependabot_url, headers=headers, timeout=30)
-                dep_response.raise_for_status()
-                dependabot_alerts = dep_response.json()
+                dependabot_alerts = _fetch_paginated_data(dependabot_url, headers)
                 repo_metrics["dependabot_open"] = len(dependabot_alerts)
             except requests.HTTPError as exc:
                 if exc.response.status_code not in {403, 404}:
@@ -236,9 +240,7 @@ def get_ghas_metrics() -> dict[str, Any]:
 
             try:
                 secret_scanning_url = f"https://api.github.com/repos/{repo_name}/secret-scanning/alerts?state=open&per_page=100"
-                ss_response = requests.get(secret_scanning_url, headers=headers, timeout=30)
-                ss_response.raise_for_status()
-                secret_alerts = ss_response.json()
+                secret_alerts = _fetch_paginated_data(secret_scanning_url, headers)
                 repo_metrics["secret_scanning_open"] = len(secret_alerts)
             except requests.HTTPError as exc:
                 if exc.response.status_code not in {403, 404}:
