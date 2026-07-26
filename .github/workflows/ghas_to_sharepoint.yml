@@ -44,26 +44,26 @@ jobs:
         run: |
           python3 .github/scripts/fetch_and_push.py
           python3 - <<'PY'
-from pathlib import Path
-import os
-from importlib.machinery import SourceFileLoader
+          from pathlib import Path
+          import os
+          from importlib.machinery import SourceFileLoader
 
-script = SourceFileLoader('fetch_and_push', str(Path('.github/scripts/fetch_and_push.py'))).load_module()
-try:
-    metrics = script.get_ghas_metrics() if os.getenv('GH_PAT') and os.getenv('GH_ORG_NAME') else {
-        'organization': os.getenv('GH_ORG_NAME', 'demo'),
-        'fetched_at': script.datetime.now(script.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'rows': []
-    }
-except Exception as exc:
-    metrics = {
-        'organization': os.getenv('GH_ORG_NAME', 'demo'),
-        'fetched_at': script.datetime.now(script.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'rows': [],
-        'error': str(exc),
-    }
-script.write_pages_artifacts(metrics, Path('docs/data'))
-PY
+          script = SourceFileLoader('fetch_and_push', str(Path('.github/scripts/fetch_and_push.py'))).load_module()
+          try:
+              metrics = script.get_ghas_metrics() if os.getenv('GH_PAT') and os.getenv('GH_ORG_NAME') else {
+                  'organization': os.getenv('GH_ORG_NAME', 'demo'),
+                  'fetched_at': script.datetime.now(script.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                  'rows': []
+              }
+          except Exception as exc:
+              metrics = {
+                  'organization': os.getenv('GH_ORG_NAME', 'demo'),
+                  'fetched_at': script.datetime.now(script.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                  'rows': [],
+                  'error': str(exc),
+              }
+          script.write_pages_artifacts(metrics, Path('docs/data'))
+          PY
 
       - name: Upload metrics artifacts
         if: always()
