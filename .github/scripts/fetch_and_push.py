@@ -29,10 +29,21 @@ def get_ghas_metrics() -> dict[str, Any]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    repos_url = f"https://api.github.com/orgs/{ORG_NAME}/repos?per_page=100"
-    repos_response = requests.get(repos_url, headers=headers, timeout=30)
-    repos_response.raise_for_status()
-    repos = repos_response.json()
+    repos_urls = [
+        f"https://api.github.com/orgs/{ORG_NAME}/repos?per_page=100",
+        f"https://api.github.com/users/{ORG_NAME}/repos?per_page=100",
+    ]
+    repos = []
+    for repos_url in repos_urls:
+        repos_response = requests.get(repos_url, headers=headers, timeout=30)
+        if repos_response.status_code == 200:
+            repos = repos_response.json()
+            break
+        if repos_response.status_code == 404:
+            continue
+        repos_response.raise_for_status()
+    if not repos:
+        raise ValueError(f"Unable to list repositories for {ORG_NAME}")
 
     rows: list[dict[str, Any]] = []
     for repo in repos:
