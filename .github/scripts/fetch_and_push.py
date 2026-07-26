@@ -149,6 +149,15 @@ def write_json_output(metrics: dict[str, Any], output_path: Optional[Path] = Non
     return target_path
 
 
+def write_pages_artifacts(metrics: dict[str, Any], output_dir: Optional[Path] = None) -> Path:
+    target_dir = output_dir or Path("docs") / "data"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    write_json_output(metrics, target_dir / "ghas_metrics.json")
+    write_csv_output(metrics, target_dir / "ghas_metrics.csv")
+    return target_dir
+
+
 def get_sharepoint_token() -> Optional[str]:
     """Authenticates against Microsoft Graph to get an access token."""
     if not all([TENANT_ID, CLIENT_ID, CLIENT_SECRET]):
@@ -226,7 +235,8 @@ if __name__ == "__main__":
 
     write_json_output(metrics)
     csv_path = write_csv_output(metrics)
-    print(f"Wrote JSON metrics to {OUTPUT_JSON} and CSV metrics to {csv_path}")
+    pages_dir = write_pages_artifacts(metrics)
+    print(f"Wrote JSON metrics to {OUTPUT_JSON}, CSV metrics to {csv_path}, and Pages data to {pages_dir}")
 
     if not os.getenv("SP_SKIP_UPLOAD"):
         try:

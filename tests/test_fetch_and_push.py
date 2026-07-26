@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from fetch_and_push import build_metrics_rows, upload_to_sharepoint, write_csv_output
+from fetch_and_push import build_metrics_rows, upload_to_sharepoint, write_csv_output, write_pages_artifacts
 
 
 class FetchAndPushTests(unittest.TestCase):
@@ -61,6 +61,28 @@ class FetchAndPushTests(unittest.TestCase):
 
             self.assertTrue((mock_dir / source_path.name).exists())
             self.assertEqual((mock_dir / source_path.name).read_text(encoding="utf-8"), "repository,code_scanning_open\nocto/sample,1\n")
+
+    def test_write_pages_artifacts_creates_data_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "site"
+            metrics = {
+                "repository": "octo/sample",
+                "rows": [{
+                    "repository": "octo/sample",
+                    "fetched_at": "2026-07-26T00:00:00Z",
+                    "code_scanning_open": 1,
+                    "code_scanning_critical": 0,
+                    "code_scanning_high": 1,
+                    "dependabot_open": 0,
+                    "secret_scanning_open": 0,
+                    "status": "ok",
+                }],
+            }
+
+            target_dir = write_pages_artifacts(metrics, output_dir)
+
+            self.assertTrue((target_dir / "ghas_metrics.json").exists())
+            self.assertTrue((target_dir / "ghas_metrics.csv").exists())
 
 
 if __name__ == "__main__":

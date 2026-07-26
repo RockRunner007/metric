@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GHAS Metrics Demo</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.5; }
+      pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>GitHub Advanced Security Metrics Demo</h1>
+    <p>This page is generated from the workflow output and can be served via GitHub Pages.</p>
+    <p>
+      <a href="./data/ghas_metrics.csv">Download CSV</a> |
+      <a href="./data/ghas_metrics.json">View JSON</a>
+    </p>
+    <pre id="status">Loading metrics…</pre>
+    <script>
+      fetch('./data/ghas_metrics.json')
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+        })
+        .catch(() => {
+          document.getElementById('status').textContent = 'Metrics file is not available yet. Run the workflow once to generate it.';
+        });
+    </script>
+  </body>
+</html>
