@@ -1,0 +1,48 @@
+name: Sync GHAS Metrics to SharePoint
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run GHAS metrics collection
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_ORG_NAME: ${{ github.repository_owner }}
+          SP_TENANT_ID: ${{ secrets.SHAREPOINT_TENANT_ID }}
+          SP_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+          SP_CLIENT_SECRET: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
+          SP_SITE_URL: ${{ secrets.SHAREPOINT_SITE_URL }}
+        run: |
+          python3 .github/scripts/fetch_and_push.py
+
+      - name: Upload metrics artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghas-metrics
+          path: |
+            ghas_metrics.json
+            ghas_metrics.csv
+          if-no-files-found: warn

@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+*.log
+ghas_metrics.json
+ghas_metrics.csv
