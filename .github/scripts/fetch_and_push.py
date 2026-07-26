@@ -124,6 +124,11 @@ def get_ghas_metrics() -> dict[str, Any]:
             try:
                 default_setup_url = f"https://api.github.com/repos/{repo_name}/code-scanning/default-setup"
                 default_setup_response = requests.get(default_setup_url, headers=headers, timeout=30)
+                if default_setup_response.status_code == 404:
+                    repo_metrics["scan_state"] = "not_supported"
+                    repo_metrics["default_setup_state"] = "not_supported"
+                    repo_metrics["scan_status"] = "not_supported"
+                    raise requests.HTTPError(response=default_setup_response)
                 default_setup_response.raise_for_status()
                 default_setup = default_setup_response.json()
                 if isinstance(default_setup, dict):
