@@ -515,11 +515,13 @@ if __name__ == "__main__":
         }
         print(f"GitHub metrics collection failed: {exc}")
 
+    # Always write the manifest first to ensure the schema is up-to-date
+    write_column_manifest(metrics, Path(COLUMN_MANIFEST_FILE))
+
     write_json_output(metrics)
     csv_path = write_csv_output(metrics)
     pages_dir = write_pages_artifacts(metrics)
-    print(f"Wrote JSON metrics to {OUTPUT_JSON}, CSV metrics to {csv_path}, and Pages data to {pages_dir}")
-    print(f"Wrote column manifest to columns.json and ticket export to {TICKET_CSV}")
+    print(f"Wrote JSON metrics to {OUTPUT_JSON}, CSV metrics to {csv_path}, Pages data to {pages_dir}, and ticket export to {TICKET_CSV}")
 
     if not os.getenv("SP_SKIP_UPLOAD"):
         try:
