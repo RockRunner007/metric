@@ -131,21 +131,24 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
         f"https://api.github.com/orgs/{owner}/repos?per_page=100",
     ]
 
-    repos: list[dict[str, Any]] = []
+    all_repos: list[dict[str, Any]] = []
+    seen_repos = set()
+
     for url in repos_urls:
-        # We try both user and org endpoints, but only one will succeed.
-        # We don't break after the first success because a user can be part of an org.
-        # We collect from all valid endpoints.
         try:
-            repos.extend(_fetch_paginated_data(url, headers))
+            fetched_repos = _fetch_paginated_data(url, headers)
+            for repo in fetched_repos:
+                if repo.get("full_name") not in seen_repos:
+                    all_repos.append(repo)
+                    seen_repos.add(repo.get("full_name"))
         except requests.HTTPError as exc:
             if exc.response.status_code != 404:
                 raise
 
-    if not repos:
+    if not all_repos:
         raise ValueError(f"Unable to list repositories for {owner}")
 
-    return repos
+    return all_repos
 
 
 def get_ghas_metrics() -> dict[str, Any]:
@@ -162,7 +165,9 @@ def get_ghas_metrics() -> dict[str, Any]:
 
     repos = get_repositories(token, owner)
     allowlist = load_repo_allowlist()
-    repos = filter_repositories_by_allowlist(repos, allowlist)
+    # If the allowlist is not empty, filter. Otherwise, use all discovered repos.
+    if allowlist:
+        repos = filter_repositories_by_allowlist(repos, allowlist)
 
     rows: list[dict[str, Any]] = []
     for repo in repos:
