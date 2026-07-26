@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GHAS Metrics Demo</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.5; color: #1f2937; }
-      .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+      :root { color-scheme: dark; }
+      body { font-family: Inter, Arial, sans-serif; margin: 2rem; line-height: 1.5; color: #f3f4f6; background: linear-gradient(135deg, #0f172a, #111827); }
+      .card { border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; background: rgba(15, 23, 42, 0.82); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
-      .metric { background: #f9fafb; padding: 0.75rem; border-radius: 8px; }
+      .metric { background: rgba(255,255,255,0.06); padding: 0.8rem; border-radius: 10px; }
       table { width: 100%; border-collapse: collapse; }
-      th, td { border-bottom: 1px solid #e5e7eb; padding: 0.6rem; text-align: left; }
-      code { background: #f3f4f6; padding: 0.15rem 0.25rem; border-radius: 4px; }
+      th, td { border-bottom: 1px solid rgba(255,255,255,0.14); padding: 0.6rem; text-align: left; }
+      code { background: rgba(255,255,255,0.09); padding: 0.12rem 0.3rem; border-radius: 4px; }
+      a { color: #93c5fd; }
+      .pill { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 999px; background: #1d4ed8; font-size: 0.8rem; margin-top: 0.25rem; }
     </style>
   </head>
   <body>
@@ -23,12 +26,12 @@
     </p>
 
     <div class="card">
-      <h2>Summary</h2>
+      <h2>Security posture overview</h2>
       <div class="grid" id="summary"></div>
     </div>
 
     <div class="card">
-      <h2>Top repositories</h2>
+      <h2>Highest-risk repositories</h2>
       <table>
         <thead>
           <tr><th>Repository</th><th>Code scanning</th><th>Critical</th><th>High</th><th>Dependabot</th><th>Secret scanning</th></tr>
@@ -47,6 +50,8 @@
 
           const totals = {
             repositories: data.repositories_scanned || rows.length,
+            withFindings: data.repositories_with_findings || rows.filter((row) => row && (Number(row.code_scanning_open) || Number(row.dependabot_open) || Number(row.secret_scanning_open))).length,
+            findings: data.total_findings || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0) + (Number(row.dependabot_open) || 0) + (Number(row.secret_scanning_open) || 0), 0),
             codeScanning: data.total_code_scanning_open || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0), 0),
             critical: data.total_code_scanning_critical || rows.reduce((sum, row) => sum + (Number(row.code_scanning_critical) || 0), 0),
             high: data.total_code_scanning_high || rows.reduce((sum, row) => sum + (Number(row.code_scanning_high) || 0), 0),
@@ -56,16 +61,18 @@
 
           summary.innerHTML = [
             ['Repositories', totals.repositories],
+            ['With findings', totals.withFindings],
+            ['Total findings', totals.findings],
             ['Code scanning', totals.codeScanning],
             ['Critical', totals.critical],
             ['High', totals.high],
             ['Dependabot', totals.dependabot],
             ['Secret scanning', totals.secrets],
-          ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div></div>`).join('');
+          ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div><div class="pill">Live</div></div>`).join('');
 
-          const topRows = rows
+          const topRows = (data.top_repositories || rows)
             .filter((row) => row && row.repository)
-            .sort((a, b) => (Number(b.code_scanning_open) || 0) - (Number(a.code_scanning_open) || 0))
+            .sort((a, b) => ((Number(b.code_scanning_open) || 0) + (Number(b.dependabot_open) || 0) + (Number(b.secret_scanning_open) || 0)) - ((Number(a.code_scanning_open) || 0) + (Number(a.dependabot_open) || 0) + (Number(a.secret_scanning_open) || 0)))
             .slice(0, 10);
 
           repos.innerHTML = topRows.map((row) => `

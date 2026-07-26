@@ -113,15 +113,28 @@ def get_ghas_metrics() -> dict[str, Any]:
 
             rows.append(repo_metrics)
 
+    severity_rows = sorted(
+        rows,
+        key=lambda item: (
+            item["code_scanning_open"] + item["dependabot_open"] + item["secret_scanning_open"]
+        ),
+        reverse=True,
+    )
+
     summary = {
         "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "organization": ORG_NAME,
         "repositories_scanned": len(rows),
+        "repositories_with_findings": sum(1 for item in rows if any([item["code_scanning_open"], item["dependabot_open"], item["secret_scanning_open"]])),
         "total_code_scanning_open": sum(item["code_scanning_open"] for item in rows),
         "total_code_scanning_critical": sum(item["code_scanning_critical"] for item in rows),
         "total_code_scanning_high": sum(item["code_scanning_high"] for item in rows),
         "total_dependabot_open": sum(item["dependabot_open"] for item in rows),
         "total_secret_scanning_open": sum(item["secret_scanning_open"] for item in rows),
+        "total_findings": sum(
+            item["code_scanning_open"] + item["dependabot_open"] + item["secret_scanning_open"] for item in rows
+        ),
+        "top_repositories": severity_rows[:10],
         "rows": rows,
     }
     return summary
