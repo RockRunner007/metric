@@ -166,7 +166,10 @@ def get_ghas_metrics() -> dict[str, Any]:
                 dependabot_alerts = dep_response.json()
                 repo_metrics["dependabot_open"] = len(dependabot_alerts)
             except requests.HTTPError as exc:
-                repo_metrics["status"] = f"dependabot_error:{exc.response.status_code}"
+                if exc.response.status_code not in {403, 404}:
+                    repo_metrics["status"] = f"dependabot_error:{exc.response.status_code}"
+                else:
+                    repo_metrics["dependabot_open"] = 0
 
             try:
                 secret_scanning_url = f"https://api.github.com/repos/{repo_name}/secret-scanning/alerts?state=open&per_page=100"
@@ -175,7 +178,10 @@ def get_ghas_metrics() -> dict[str, Any]:
                 secret_alerts = ss_response.json()
                 repo_metrics["secret_scanning_open"] = len(secret_alerts)
             except requests.HTTPError as exc:
-                repo_metrics["status"] = f"secret_scanning_error:{exc.response.status_code}"
+                if exc.response.status_code not in {403, 404}:
+                    repo_metrics["status"] = f"secret_scanning_error:{exc.response.status_code}"
+                else:
+                    repo_metrics["secret_scanning_open"] = 0
 
             rows.append(repo_metrics)
 
