@@ -59,7 +59,7 @@ def get_runtime_config() -> tuple[str, str]:
 
 
 def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
-    """Return all repositories visible to the authenticated user, including personal and org-owned repos."""
+    """Return repositories visible to the authenticated user without relying on the /user/repos endpoint."""
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -67,9 +67,8 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
     }
 
     repos_urls = [
-        "https://api.github.com/user/repos?per_page=100",
-        f"https://api.github.com/orgs/{owner}/repos?per_page=100",
         f"https://api.github.com/users/{owner}/repos?per_page=100",
+        f"https://api.github.com/orgs/{owner}/repos?per_page=100",
     ]
 
     repos: list[dict[str, Any]] = []
