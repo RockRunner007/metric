@@ -173,7 +173,7 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
     """Gathers all GHAS metrics for a single repository."""
     repo_name = repo.get("full_name", "")
     if not repo_name:
-        return {}
+        return None
 
     print(f"Processing repository: {repo_name}")
     repo_metrics = {
@@ -288,8 +288,8 @@ def get_ghas_metrics() -> dict[str, Any]:
         for future in as_completed(futures):
             try:
                 result = future.result()
-                if result:
-                    rows.append(result)
+                # The result can be None if the repo data was invalid
+                rows.append(result)
             except Exception as exc:
                 print(f"Error processing a repository: {exc}")
 
@@ -301,8 +301,11 @@ def get_ghas_metrics() -> dict[str, Any]:
     total_secret_scanning_open = sum(item.get("secret_scanning_open", 0) for item in rows)
     total_findings = total_code_scanning_open + total_dependabot_open + total_secret_scanning_open
 
+    # Filter out any None results from failed repo processing before sorting
+    valid_rows = [row for row in rows if row is not None]
+
     severity_rows = sorted(
-        rows,
+        valid_rows,
         key=lambda item: (
             item.get("code_scanning_open", 0) + item.get("dependabot_open", 0) + item.get("secret_scanning_open", 0)
         ),
@@ -314,13 +317,13 @@ def get_ghas_metrics() -> dict[str, Any]:
         "organization": owner,
         "repositories_scanned": repositories_scanned,
         "repositories_with_findings": repositories_with_findings,
-        "repositories_configured": sum(1 for item in rows if item.get("scan_status") == "configured"),
-        "repositories_pending": sum(1 for item in rows if item.get("scan_status") == "pending"),
-        "repositories_with_alerts": sum(1 for item in rows if item.get("scan_status") == "findings"),
+        "repositories_configured": sum(1 for item in valid_rows if item.get("scan_status") == "configured"),
+        "repositories_pending": sum(1 for item in valid_rows if item.get("scan_status") == "pending"),
+        "repositories_with_alerts": sum(1 for item in valid_rows if item.get("scan_status") == "findings"),
         "total_code_scanning_open": total_code_scanning_open,
-        "total_code_scanning_critical": sum(item.get("code_scanning_critical", 0) for item in rows),
-        "total_code_scanning_high": sum(item.get("code_scanning_high", 0) for item in rows),
-        "total_code_scanning_medium": sum(item.get("code_scanning_medium", 0) for item in rows),
+        "total_code_scanning_critical": sum(item.get("code_scanning_critical", 0) for item in valid_rows),
+        "total_code_scanning_high": sum(item.get("code_scanning_high", 0) for item in valid_rows),
+        "total_code_scanning_medium": sum(item.get("code_scanning_medium", 0) for item in valid_rows),
         "total_dependabot_open": total_dependabot_open,
         "total_secret_scanning_open": total_secret_scanning_open,
         "total_findings": total_findings,
