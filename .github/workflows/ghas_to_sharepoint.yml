@@ -28,6 +28,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -35,7 +43,6 @@ jobs:
 
       - name: Run GHAS metrics collection
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
@@ -44,7 +51,7 @@ jobs:
           SP_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
           SP_CLIENT_SECRET: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
           SP_SITE_URL: ${{ secrets.SHAREPOINT_SITE_URL }}
-          SP_MOCK_MODE: true
+          SP_MOCK_MODE: false
         run: |
           python3 .github/scripts/fetch_and_push.py
           echo "Metrics collection completed and Pages artifacts were updated."
