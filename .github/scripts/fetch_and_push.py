@@ -160,11 +160,12 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
                     all_repos.append(repo)
                     seen_repos.add(repo.get("full_name"))
         except requests.HTTPError as exc:
+            # A 404 is expected if the owner is a user and we query the org endpoint, or vice-versa.
             if exc.response.status_code != 404:
                 raise
 
     if not all_repos:
-        raise ValueError(f"Unable to list repositories for {owner}")
+        print(f"Warning: Unable to list any repositories for {owner}. The account may have no repositories or the token may lack permissions.")
 
     return all_repos
 
@@ -294,15 +295,13 @@ def get_ghas_metrics() -> dict[str, Any]:
                 print(f"Error processing a repository: {exc}")
 
     # Calculate summary metrics after all rows are collected
-    repositories_scanned = len(rows)
-    repositories_with_findings = sum(1 for item in rows if any([item.get("code_scanning_open", 0), item.get("dependabot_open", 0), item.get("secret_scanning_open", 0)]))
-    total_code_scanning_open = sum(item.get("code_scanning_open", 0) for item in rows)
-    total_dependabot_open = sum(item.get("dependabot_open", 0) for item in rows)
-    total_secret_scanning_open = sum(item.get("secret_scanning_open", 0) for item in rows)
-    total_findings = total_code_scanning_open + total_dependabot_open + total_secret_scanning_open
-
-    # Filter out any None results from failed repo processing before sorting
     valid_rows = [row for row in rows if row is not None]
+    repositories_scanned = len(valid_rows)
+    repositories_with_findings = sum(1 for item in valid_rows if any([item.get("code_scanning_open", 0), item.get("dependabot_open", 0), item.get("secret_scanning_open", 0)]))
+    total_code_scanning_open = sum(item.get("code_scanning_open", 0) for item in valid_rows)
+    total_dependabot_open = sum(item.get("dependabot_open", 0) for item in valid_rows)
+    total_secret_scanning_open = sum(item.get("secret_scanning_open", 0) for item in valid_rows)
+    total_findings = total_code_scanning_open + total_dependabot_open + total_secret_scanning_open
 
     severity_rows = sorted(
         valid_rows,
@@ -328,7 +327,7 @@ def get_ghas_metrics() -> dict[str, Any]:
         "total_secret_scanning_open": total_secret_scanning_open,
         "total_findings": total_findings,
         "top_repositories": severity_rows[:10],
-        "rows": rows,
+        "rows": valid_rows,
     }
     return summary
 
