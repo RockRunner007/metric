@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -168,6 +169,97 @@ def get_repositories(token: str, owner: str) -> list[dict[str, Any]]:
     return all_repos
 
 
+def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    """Gathers all GHAS metrics for a single repository."""
+    repo_name = repo.get("full_name", "")
+    if not repo_name:
+        return {}
+
+    print(f"Processing repository: {repo_name}")
+    repo_metrics = {
+        "repository": repo_name,
+        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "code_scanning_open": 0,
+        "code_scanning_critical": 0,
+        "code_scanning_high": 0,
+        "code_scanning_medium": 0,
+        "dependabot_open": 0,
+        "secret_scanning_open": 0,
+        "status": "ok",
+        "scan_status": "unknown",
+        "scan_state": None,
+        "default_setup_state": None,
+    }
+
+    try:
+        default_setup_url = f"https://api.github.com/repos/{repo_name}/code-scanning/default-setup"
+        default_setup_response = requests.get(default_setup_url, headers=headers, timeout=30)
+        if default_setup_response.status_code == 404:
+            repo_metrics["scan_state"] = "not_supported"
+            repo_metrics["default_setup_state"] = "not_supported"
+            repo_metrics["scan_status"] = "not_supported"
+        else:
+            default_setup_response.raise_for_status()
+            default_setup = default_setup_response.json()
+            default_setup_state = default_setup.get("state")
+            repo_metrics["default_setup_state"] = default_setup_state
+            repo_metrics["scan_state"] = default_setup_state
+            if default_setup_state == "configured":
+                repo_metrics["scan_status"] = "configured"
+            else:
+                repo_metrics["scan_status"] = "pending"
+    except requests.HTTPError as exc:
+        if exc.response.status_code != 404:
+            repo_metrics["scan_status"] = "error"
+            repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+
+    try:
+        code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
+        alerts = _fetch_paginated_data(code_scanning_url, headers)
+        repo_metrics["code_scanning_open"] = len(alerts)
+        repo_metrics["code_scanning_critical"] = sum(
+            1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "critical"
+        )
+        repo_metrics["code_scanning_high"] = sum(
+            1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "high"
+        )
+        repo_metrics["code_scanning_medium"] = sum(
+            1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "medium"
+        )
+        if repo_metrics["code_scanning_open"]:
+            repo_metrics["scan_status"] = "findings"
+    except requests.HTTPError as exc:
+        if exc.response.status_code not in {403, 404}:
+            repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+        else:
+            repo_metrics["code_scanning_open"] = 0
+            repo_metrics["code_scanning_critical"] = 0
+            repo_metrics["code_scanning_high"] = 0
+            repo_metrics["code_scanning_medium"] = 0
+
+    try:
+        dependabot_url = f"https://api.github.com/repos/{repo_name}/dependabot/alerts?state=open&per_page=100"
+        dependabot_alerts = _fetch_paginated_data(dependabot_url, headers)
+        repo_metrics["dependabot_open"] = len(dependabot_alerts)
+    except requests.HTTPError as exc:
+        if exc.response.status_code not in {403, 404}:
+            repo_metrics["status"] = f"dependabot_error:{exc.response.status_code}"
+        else:
+            repo_metrics["dependabot_open"] = 0
+
+    try:
+        secret_scanning_url = f"https://api.github.com/repos/{repo_name}/secret-scanning/alerts?state=open&per_page=100"
+        secret_alerts = _fetch_paginated_data(secret_scanning_url, headers)
+        repo_metrics["secret_scanning_open"] = len(secret_alerts)
+    except requests.HTTPError as exc:
+        if exc.response.status_code not in {403, 404}:
+            repo_metrics["status"] = f"secret_scanning_error:{exc.response.status_code}"
+        else:
+            repo_metrics["secret_scanning_open"] = 0
+
+    return repo_metrics
+
+
 def get_ghas_metrics() -> dict[str, Any]:
     """Fetches GHAS metrics for all repositories visible to the authenticated account."""
     token, owner = get_runtime_config()
@@ -186,96 +278,18 @@ def get_ghas_metrics() -> dict[str, Any]:
     if allowlist:
         repos = filter_repositories_by_allowlist(repos, allowlist)
 
+    # Process repositories in parallel for performance
     rows: list[dict[str, Any]] = []
-    for repo in repos:
-        if not repo.get("archived"):
-            repo_name = repo.get("full_name", "")
-            repo_metrics = {
-                "repository": repo_name,
-                "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "code_scanning_open": 0,
-                "code_scanning_critical": 0,
-                "code_scanning_high": 0,
-                "code_scanning_medium": 0,
-                "dependabot_open": 0,
-                "secret_scanning_open": 0,
-                "status": "ok",
-                "scan_status": "unknown",
-                "scan_state": None,
-                "default_setup_state": None,
-            }
-
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Create a future for each repository to be processed
+        futures = {executor.submit(_get_metrics_for_repo, repo, headers) for repo in repos if not repo.get("archived")}
+        for future in as_completed(futures):
             try:
-                default_setup_url = f"https://api.github.com/repos/{repo_name}/code-scanning/default-setup"
-                default_setup_response = requests.get(default_setup_url, headers=headers, timeout=30)
-                if default_setup_response.status_code == 404:
-                    repo_metrics["scan_state"] = "not_supported"
-                    repo_metrics["default_setup_state"] = "not_supported"
-                    repo_metrics["scan_status"] = "not_supported"
-                    raise requests.HTTPError(response=default_setup_response)
-                default_setup_response.raise_for_status()
-                default_setup = default_setup_response.json()
-                if isinstance(default_setup, dict):
-                    default_setup_state = default_setup.get("state")
-                elif isinstance(default_setup, list) and default_setup:
-                    default_setup_state = default_setup[0].get("state") if isinstance(default_setup[0], dict) else None
-                else:
-                    default_setup_state = None
-                repo_metrics["default_setup_state"] = default_setup_state
-                repo_metrics["scan_state"] = default_setup_state
-                if default_setup_state == "configured":
-                    repo_metrics["scan_status"] = "configured"
-                else:
-                    repo_metrics["scan_status"] = "pending"
-            except requests.HTTPError as exc:
-                repo_metrics["scan_status"] = "error"
-                repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
-
-            try:
-                code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
-                alerts = _fetch_paginated_data(code_scanning_url, headers)
-                repo_metrics["code_scanning_open"] = len(alerts)
-                repo_metrics["code_scanning_critical"] = sum(
-                    1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "critical"
-                )
-                repo_metrics["code_scanning_high"] = sum(
-                    1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "high"
-                )
-                repo_metrics["code_scanning_medium"] = sum(
-                    1 for item in alerts if item.get("rule", {}).get("security_severity_level") == "medium"
-                )
-                if repo_metrics["code_scanning_open"]:
-                    repo_metrics["scan_status"] = "findings"
-            except requests.HTTPError as exc:
-                if exc.response.status_code not in {403, 404}:
-                    repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
-                else:
-                    repo_metrics["code_scanning_open"] = 0
-                    repo_metrics["code_scanning_critical"] = 0
-                    repo_metrics["code_scanning_high"] = 0
-                    repo_metrics["code_scanning_medium"] = 0
-
-            try:
-                dependabot_url = f"https://api.github.com/repos/{repo_name}/dependabot/alerts?state=open&per_page=100"
-                dependabot_alerts = _fetch_paginated_data(dependabot_url, headers)
-                repo_metrics["dependabot_open"] = len(dependabot_alerts)
-            except requests.HTTPError as exc:
-                if exc.response.status_code not in {403, 404}:
-                    repo_metrics["status"] = f"dependabot_error:{exc.response.status_code}"
-                else:
-                    repo_metrics["dependabot_open"] = 0
-
-            try:
-                secret_scanning_url = f"https://api.github.com/repos/{repo_name}/secret-scanning/alerts?state=open&per_page=100"
-                secret_alerts = _fetch_paginated_data(secret_scanning_url, headers)
-                repo_metrics["secret_scanning_open"] = len(secret_alerts)
-            except requests.HTTPError as exc:
-                if exc.response.status_code not in {403, 404}:
-                    repo_metrics["status"] = f"secret_scanning_error:{exc.response.status_code}"
-                else:
-                    repo_metrics["secret_scanning_open"] = 0
-
-            rows.append(repo_metrics)
+                result = future.result()
+                if result:
+                    rows.append(result)
+            except Exception as exc:
+                print(f"Error processing a repository: {exc}")
 
     severity_rows = sorted(
         rows,
