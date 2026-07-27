@@ -374,10 +374,7 @@ def write_column_manifest(metrics: dict[str, Any], output_path: Optional[Path] =
 def write_csv_output(metrics: dict[str, Any], output_path: Optional[Path] = None) -> Path:
     rows = build_metrics_rows(metrics)
     target_path = output_path or Path(OUTPUT_CSV)
-    manifest = load_column_manifest()
-    fieldnames = [column for column in manifest.get("columns", DEFAULT_CSV_COLUMNS) if column in DEFAULT_CSV_COLUMNS or any(column in row for row in rows)]
-    if not fieldnames:
-        fieldnames = DEFAULT_CSV_COLUMNS
+    fieldnames = DEFAULT_CSV_COLUMNS
     with target_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
