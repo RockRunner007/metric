@@ -294,9 +294,9 @@ def get_ghas_metrics() -> dict[str, Any]:
             except Exception as exc:
                 print(f"Error processing a repository: {exc}")
 
-    # Filter out any None results from failed repo processing before doing any calculations.
+    # Filter out any None results from failed repo processing before doing any calculations
     valid_rows = [row for row in rows if row is not None]
-    
+
     # Calculate summary metrics after all rows are collected
     repositories_scanned = len(valid_rows)
     repositories_with_findings = sum(1 for item in valid_rows if any([item.get("code_scanning_open", 0), item.get("dependabot_open", 0), item.get("secret_scanning_open", 0)]))
