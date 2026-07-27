@@ -293,10 +293,18 @@ def get_ghas_metrics() -> dict[str, Any]:
             except Exception as exc:
                 print(f"Error processing a repository: {exc}")
 
+    # Calculate summary metrics after all rows are collected
+    repositories_scanned = len(rows)
+    repositories_with_findings = sum(1 for item in rows if any([item.get("code_scanning_open", 0), item.get("dependabot_open", 0), item.get("secret_scanning_open", 0)]))
+    total_code_scanning_open = sum(item.get("code_scanning_open", 0) for item in rows)
+    total_dependabot_open = sum(item.get("dependabot_open", 0) for item in rows)
+    total_secret_scanning_open = sum(item.get("secret_scanning_open", 0) for item in rows)
+    total_findings = total_code_scanning_open + total_dependabot_open + total_secret_scanning_open
+
     severity_rows = sorted(
         rows,
         key=lambda item: (
-            item["code_scanning_open"] + item["dependabot_open"] + item["secret_scanning_open"]
+            item.get("code_scanning_open", 0) + item.get("dependabot_open", 0) + item.get("secret_scanning_open", 0)
         ),
         reverse=True,
     )
@@ -304,20 +312,18 @@ def get_ghas_metrics() -> dict[str, Any]:
     summary = {
         "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "organization": owner,
-        "repositories_scanned": len(rows),
-        "repositories_with_findings": sum(1 for item in rows if any([item["code_scanning_open"], item["dependabot_open"], item["secret_scanning_open"]])),
+        "repositories_scanned": repositories_scanned,
+        "repositories_with_findings": repositories_with_findings,
         "repositories_configured": sum(1 for item in rows if item.get("scan_status") == "configured"),
         "repositories_pending": sum(1 for item in rows if item.get("scan_status") == "pending"),
         "repositories_with_alerts": sum(1 for item in rows if item.get("scan_status") == "findings"),
-        "total_code_scanning_open": sum(item["code_scanning_open"] for item in rows),
-        "total_code_scanning_critical": sum(item["code_scanning_critical"] for item in rows),
-        "total_code_scanning_high": sum(item["code_scanning_high"] for item in rows),
+        "total_code_scanning_open": total_code_scanning_open,
+        "total_code_scanning_critical": sum(item.get("code_scanning_critical", 0) for item in rows),
+        "total_code_scanning_high": sum(item.get("code_scanning_high", 0) for item in rows),
         "total_code_scanning_medium": sum(item.get("code_scanning_medium", 0) for item in rows),
-        "total_dependabot_open": sum(item["dependabot_open"] for item in rows),
-        "total_secret_scanning_open": sum(item["secret_scanning_open"] for item in rows),
-        "total_findings": sum(
-            item["code_scanning_open"] + item["dependabot_open"] + item["secret_scanning_open"] for item in rows
-        ),
+        "total_dependabot_open": total_dependabot_open,
+        "total_secret_scanning_open": total_secret_scanning_open,
+        "total_findings": total_findings,
         "top_repositories": severity_rows[:10],
         "rows": rows,
     }
