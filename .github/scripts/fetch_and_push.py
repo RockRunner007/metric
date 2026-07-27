@@ -539,13 +539,14 @@ if __name__ == "__main__":
 
     if not os.getenv("SP_SKIP_UPLOAD"):
         try:
-            token = get_sharepoint_token()
-            if token:
-                upload_to_sharepoint(token, str(csv_path))
+            sp_token = get_sharepoint_token()
+            is_mock_mode = os.getenv("SP_MOCK_MODE", "true").lower() == "true"
+
+            if sp_token and not is_mock_mode:
+                upload_to_sharepoint(sp_token, str(csv_path), mock_mode=False)
+            elif is_mock_mode:
+                upload_to_sharepoint("mock-token", str(csv_path), mock_mode=True)
             else:
-                if os.getenv("SP_MOCK_MODE", "true").lower() == "true":
-                    upload_to_sharepoint("mock-token", str(csv_path), mock_mode=True)
-                else:
-                    print("SharePoint credentials not configured; leaving CSV artifact for download.")
+                print("SharePoint credentials not configured and not in mock mode; skipping upload.")
         except Exception as exc:  # noqa: BLE001
             print(f"SharePoint upload failed: {exc}. CSV artifact preserved.")
