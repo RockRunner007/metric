@@ -214,7 +214,6 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
         if exc.response.status_code != 404:
             repo_metrics["scan_status"] = "error"
             repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
-            return repo_metrics
  
     try:
         code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
