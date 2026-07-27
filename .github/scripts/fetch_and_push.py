@@ -519,23 +519,25 @@ if __name__ == "__main__":
     try:
         metrics = get_ghas_metrics()
     except Exception as exc:  # noqa: BLE001
+        error_message = f"error:{exc}"
         metrics = {
             "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "organization": runtime_owner or ORG_NAME or "unknown",
             "error": str(exc),
-            "rows": [
-                {
-                    "repository": runtime_owner or ORG_NAME or "unknown",
-                    "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "code_scanning_open": 0,
-                    "code_scanning_critical": 0,
-                    "code_scanning_high": 0,
-                    "code_scanning_medium": 0,
-                    "dependabot_open": 0,
-                    "secret_scanning_open": 0,
-                    "status": f"error:{exc}",
-                }
-            ],
+            "repositories_scanned": 0,
+            "repositories_with_findings": 0,
+            "repositories_configured": 0,
+            "repositories_pending": 0,
+            "repositories_with_alerts": 0,
+            "total_code_scanning_open": 0,
+            "total_code_scanning_critical": 0,
+            "total_code_scanning_high": 0,
+            "total_code_scanning_medium": 0,
+            "total_dependabot_open": 0,
+            "total_secret_scanning_open": 0,
+            "total_findings": 0,
+            "top_repositories": [],
+            "rows": [],
         }
         print(f"GitHub metrics collection failed: {exc}")
 
