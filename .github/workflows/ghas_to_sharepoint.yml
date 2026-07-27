@@ -56,23 +56,6 @@ jobs:
           python3 .github/scripts/fetch_and_push.py
           echo "Metrics collection completed and Pages artifacts were updated."
 
-      - name: Upload metrics artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ghas-metrics
-          path: |
-            ghas_metrics.json
-            ghas_metrics.csv
-            columns.json
-            tickets.csv
-            docs/data/ghas_metrics.json
-            docs/data/ghas_metrics.csv
-            docs/data/columns.json
-            docs/data/tickets.csv
-            docs/index.html
-          if-no-files-found: warn
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
