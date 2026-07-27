@@ -283,6 +283,7 @@ def get_ghas_metrics() -> dict[str, Any]:
 
     # Process repositories in parallel for performance
     rows: list[dict[str, Any]] = []
+    valid_rows: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=10) as executor:
         # Create a future for each repository to be processed
         futures = {executor.submit(_get_metrics_for_repo, repo, headers) for repo in repos if not repo.get("archived")}
@@ -294,8 +295,8 @@ def get_ghas_metrics() -> dict[str, Any]:
             except Exception as exc:
                 print(f"Error processing a repository: {exc}")
 
-    # Filter out any None results from failed repo processing before doing any calculations
-    valid_rows = [row for row in rows if row is not None]
+        # Filter out any None results from failed repo processing before doing any calculations
+        valid_rows = [row for row in rows if row is not None]
 
     # Calculate summary metrics after all rows are collected
     repositories_scanned = len(valid_rows)
