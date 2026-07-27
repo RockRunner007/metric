@@ -22,6 +22,7 @@
       .status-configured { color: #4ade80; }
       .status-pending { color: #fbbf24; }
       .status-findings { color: #f87171; }
+      .warning-banner { background-color: #fef3c7; color: #92400e; padding: 1rem; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #fde68a; }
     </style>
   </head>
   <body>
@@ -31,6 +32,8 @@
       <a href="./data/ghas_metrics.csv">Download CSV</a> |
       <a href="./data/ghas_metrics.json">View JSON</a>
     </p>
+
+    <div id="warning-container"></div>
 
     <div class="card">
       <h2>Security posture overview</h2>
@@ -58,31 +61,37 @@
           const summary = document.getElementById('summary');
           const repos = document.getElementById('repos');
 
+          const hasApiErrors = rows.some(row => row && Array.isArray(row.api_errors) && row.api_errors.length > 0);
+          if (hasApiErrors) {
+            const warningContainer = document.getElementById('warning-container');
+            warningContainer.innerHTML = `<div class="warning-banner"><strong>Warning:</strong> Some repositories could not be scanned due to permissions errors (403 Forbidden). This usually means the workflow is using a token that lacks cross-repository access. Please use a Personal Access Token (PAT) with 'security_events:read' scope.</div>`;
+          }
+
           const totals = {
-            repositories: data.repositories_scanned || rows.length,
-            withFindings: data.repositories_with_findings || rows.filter((row) => row && (Number(row.code_scanning_open) || Number(row.dependabot_open) || Number(row.secret_scanning_open))).length,
-            findings: data.total_findings || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0) + (Number(row.dependabot_open) || 0) + (Number(row.secret_scanning_open) || 0), 0),
-            codeScanning: data.total_code_scanning_open || rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0), 0),
-            critical: data.total_code_scanning_critical || rows.reduce((sum, row) => sum + (Number(row.code_scanning_critical) || 0), 0),
-            high: data.total_code_scanning_high || rows.reduce((sum, row) => sum + (Number(row.code_scanning_high) || 0), 0),
-            medium: data.total_code_scanning_medium || rows.reduce((sum, row) => sum + (Number(row.code_scanning_medium) || 0), 0),
-            dependabot: data.total_dependabot_open || rows.reduce((sum, row) => sum + (Number(row.dependabot_open) || 0), 0),
-            secrets: data.total_secret_scanning_open || rows.reduce((sum, row) => sum + (Number(row.secret_scanning_open) || 0), 0),
+            repositories: data.repositories_scanned ?? rows.length,
+            withFindings: data.repositories_with_findings ?? rows.filter((row) => row && (Number(row.code_scanning_open) > 0 || Number(row.dependabot_open) > 0 || Number(row.secret_scanning_open) > 0)).length,
+            findings: data.total_findings ?? rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0) + (Number(row.dependabot_open) || 0) + (Number(row.secret_scanning_open) || 0), 0),
+            codeScanning: data.total_code_scanning_open ?? rows.reduce((sum, row) => sum + (Number(row.code_scanning_open) || 0), 0),
+            critical: data.total_code_scanning_critical ?? rows.reduce((sum, row) => sum + (Number(row.code_scanning_critical) || 0), 0),
+            high: data.total_code_scanning_high ?? rows.reduce((sum, row) => sum + (Number(row.code_scanning_high) || 0), 0),
+            medium: data.total_code_scanning_medium ?? rows.reduce((sum, row) => sum + (Number(row.code_scanning_medium) || 0), 0),
+            dependabot: data.total_dependabot_open ?? rows.reduce((sum, row) => sum + (Number(row.dependabot_open) || 0), 0),
+            secrets: data.total_secret_scanning_open ?? rows.reduce((sum, row) => sum + (Number(row.secret_scanning_open) || 0), 0),
           };
 
           summary.innerHTML = [
-            ['Repositories', totals.repositories],
-            ['Configured', data.repositories_configured || 0],
-            ['Pending', data.repositories_pending || 0],
-            ['With alerts', data.repositories_with_alerts || 0],
-            ['With findings', totals.withFindings],
-            ['Total findings', totals.findings],
-            ['Code scanning', totals.codeScanning],
-            ['Critical', totals.critical],
-            ['High', totals.high],
-            ['Medium', totals.medium],
-            ['Dependabot', totals.dependabot],
-            ['Secret scanning', totals.secrets],
+            ['Repositories', totals.repositories ?? 'n/a'],
+            ['Configured', data.repositories_configured ?? 'n/a'],
+            ['Pending', data.repositories_pending ?? 'n/a'],
+            ['With alerts', data.repositories_with_alerts ?? 'n/a'],
+            ['With findings', totals.withFindings ?? 'n/a'],
+            ['Total findings', totals.findings ?? 'n/a'],
+            ['Code scanning', totals.codeScanning ?? 'n/a'],
+            ['Critical', totals.critical ?? 'n/a'],
+            ['High', totals.high ?? 'n/a'],
+            ['Medium', totals.medium ?? 'n/a'],
+            ['Dependabot', totals.dependabot ?? 'n/a'],
+            ['Secret scanning', totals.secrets ?? 'n/a'],
           ].map(([label, value]) => `<div class="metric"><strong>${label}</strong><div>${value}</div><div class="pill">Live</div></div>`).join('');
 
           const updated = document.createElement('p');

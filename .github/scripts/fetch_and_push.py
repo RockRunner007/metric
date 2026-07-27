@@ -111,6 +111,10 @@ def _retryable_request(func):
         for i in range(3):
             try:
                 return func(*args, **kwargs)
+            except requests.exceptions.HTTPError as e:
+                if 400 <= e.response.status_code < 500:
+                    raise  # Do not retry on client errors (4xx)
+                raise
             except requests.exceptions.RequestException as e:
                 if i < 2:
                     print(f"Request failed: {e}. Retrying in 5s...")
@@ -190,6 +194,7 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
         "scan_status": "unknown",
         "scan_state": None,
         "default_setup_state": None,
+        "api_errors": [],
     }
 
     try:
@@ -200,20 +205,20 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
             repo_metrics["default_setup_state"] = "not_supported"
             repo_metrics["scan_status"] = "not_supported"
         else:
+            # This is the source of truth for whether scanning is configured
+            # We save it now before scan_status is potentially overwritten by "findings"
             default_setup_response.raise_for_status()
             default_setup = default_setup_response.json()
             default_setup_state = default_setup.get("state")
             repo_metrics["default_setup_state"] = default_setup_state
             repo_metrics["scan_state"] = default_setup_state
-            if default_setup_state == "configured":
-                repo_metrics["scan_status"] = "configured"
-            else:
-                repo_metrics["scan_status"] = "pending"
+            repo_metrics["scan_status"] = "configured" if default_setup_state == "configured" else "pending"
     except requests.HTTPError as exc:
-        # This is a critical failure for this repo, so we set the status and return.
         if exc.response.status_code != 404:
             repo_metrics["scan_status"] = "error"
             repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+            if exc.response.status_code == 403:
+                repo_metrics["api_errors"].append("code_scanning:403")
  
     try:
         code_scanning_url = f"https://api.github.com/repos/{repo_name}/code-scanning/alerts?state=open&per_page=100"
@@ -233,6 +238,8 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
     except requests.HTTPError as exc:
         if exc.response.status_code not in {403, 404}:
             repo_metrics["status"] = f"code_scanning_error:{exc.response.status_code}"
+        elif exc.response.status_code == 403:
+            repo_metrics["api_errors"].append("code_scanning:403")
         else:
             repo_metrics["code_scanning_open"] = 0
             repo_metrics["code_scanning_critical"] = 0
@@ -246,6 +253,8 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
     except requests.HTTPError as exc:
         if exc.response.status_code not in {403, 404}:
             repo_metrics["status"] = f"dependabot_error:{exc.response.status_code}"
+        elif exc.response.status_code == 403:
+            repo_metrics["api_errors"].append("dependabot:403")
         else:
             repo_metrics["dependabot_open"] = 0
 
@@ -256,6 +265,8 @@ def _get_metrics_for_repo(repo: dict[str, Any], headers: dict[str, str]) -> dict
     except requests.HTTPError as exc:
         if exc.response.status_code not in {403, 404}:
             repo_metrics["status"] = f"secret_scanning_error:{exc.response.status_code}"
+        elif exc.response.status_code == 403:
+            repo_metrics["api_errors"].append("secret_scanning:403")
         else:
             repo_metrics["secret_scanning_open"] = 0
 
@@ -332,6 +343,11 @@ def get_ghas_metrics() -> dict[str, Any]:
         "rows": valid_rows,
     }
     return summary
+
+
+def fail_if_all_repos_are_blocked(rows: list[dict[str, Any]]):
+    if rows and all(row.get("api_errors") for row in rows):
+        raise SystemExit("Error: All repositories failed with API errors (likely 403 Forbidden). Check that GH_PAT has correct permissions.")
 
 
 def build_metrics_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -539,6 +555,8 @@ if __name__ == "__main__":
             "rows": [],
         }
         print(f"GitHub metrics collection failed: {exc}")
+
+    fail_if_all_repos_are_blocked(metrics.get("rows", []))
 
     # Always write the manifest first to ensure the schema is up-to-date
     write_column_manifest(metrics, Path(COLUMN_MANIFEST_FILE))

@@ -3,3 +3,4 @@ __pycache__/
 *.log
 ghas_metrics.json
 ghas_metrics.csv
+*.DS_Store

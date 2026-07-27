@@ -41,12 +41,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Warn on missing GH_PAT
+        if: env.GH_PAT == ''
+        run: |
+          echo "GH_PAT is not set. The default GITHUB_TOKEN will be used, which can only see this repository."
+          echo "Cross-repository GHAS metrics will fail with 403 Forbidden."
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+
       - name: Run GHAS metrics collection
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          GH_ORG_NAME: ${{ github.repository_owner }}
+          GH_ORG_NAME: ${{ github.repository_owner }} # Fallback if not specified
           SP_TENANT_ID: ${{ secrets.SHAREPOINT_TENANT_ID }}
           SP_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
           SP_CLIENT_SECRET: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
@@ -55,6 +64,12 @@ jobs:
         run: |
           python3 .github/scripts/fetch_and_push.py
           echo "Metrics collection completed and Pages artifacts were updated."
+
+      - name: Add job summary
+        if: always()
+        run: |
+          echo "### GHAS Metrics Collection Summary" >> $GITHUB_STEP_SUMMARY
+          echo "The workflow has completed. Check the GitHub Pages site for the updated dashboard." >> $GITHUB_STEP_SUMMARY
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
