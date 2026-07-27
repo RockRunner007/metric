@@ -376,7 +376,7 @@ def write_csv_output(metrics: dict[str, Any], output_path: Optional[Path] = None
     target_path = output_path or Path(OUTPUT_CSV)
     fieldnames = DEFAULT_CSV_COLUMNS
     with target_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, restval="", extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     return target_path
